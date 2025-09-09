@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Heart PIN Lock to 3D Scene</title>
+<style>
+html, body {
+  margin:0; padding:0;
+  width:100%; height:100%;
+  font-family:sans-serif;
+  overflow:hidden;
+  position:relative;
+  background:black;
+}
+body::before {
+  content:"";
+  position:absolute; top:0; left:0;
+  width:100%; height:100%;
+  background-image:url("https://i.imgur.com/YXdLTHA.png");
+  background-size:cover;
+  background-position:center;
+  opacity:0.35;
+  z-index:0;
+  pointer-events:none;
+}
+
+/* Lock Screen */
+#lockScreen {
+  position:absolute;
+  width:350px; padding:30px;
+  background: rgba(255,255,255,0.9);
+  border-radius:25px;
+  text-align:center;
+  top:50%; left:50%;
+  transform:translate(-50%,-50%);
+  box-shadow:0 0 30px rgba(0,0,0,0.2);
+  z-index:10;
+}
+
+/* Heart Shape */
+.heart {
+  width:100px; height:90px;
+  background:red;
+  position:relative;
+  margin:0 auto 20px auto;
+  transform:rotate(-45deg);
+}
+.heart::before, .heart::after {
+  content:""; width:100px; height:90px;
+  background:red; border-radius:50%;
+  position:absolute;
+}
+.heart::before { top:-50px; left:0; }
+.heart::after { left:50px; top:0; }
+
+h2 { margin-bottom:20px; color: hotpink; }
+
+.picker-container { display:flex; justify-content:center; gap:10px; margin-bottom:20px; }
+.picker { display:flex; flex-direction:column; align-items:center; }
+.picker input {
+  width:50px; text-align:center; font-size:1.2em; margin:5px 0;
+  border:none; background:#fff0f5; border-radius:10px;
+}
+.picker button { width:50px; font-size:1em; cursor:pointer; }
+#unlockBtn {
+  background:hotpink; border:none; padding:10px 20px;
+  border-radius:10px; color:white; font-size:1em;
+  cursor:pointer;
+}
+#errorMsg { color:red; margin-top:10px; display:none; }
+
+/* "I Love You" Overlay */
+#iLoveText {
+  position:absolute; top:50%; left:50%;
+  transform:translate(-50%,-50%);
+  font-size:3em; color:hotpink;
+  display:none; z-index:5; user-select:none; opacity:1;
+  transition: opacity 2s ease;
+}
+
+/* 3D Scene Canvas */
+canvas { position:absolute; top:0; left:0; z-index:1; }
+
+/* Floating Text & Hearts */
+.floating-text {
+  position:absolute; font-size:1.25em; color:hotpink;
+  z-index:2; pointer-events:none; left:50%; top:50%;
+  white-space:nowrap; user-select:none;
+  animation-fill-mode:forwards;
+}
+@keyframes floatTextAnim {
+  0% { opacity:0; transform:translate(-50%,-50%) translate(0,0) scale(1);}
+  10%{ opacity:1;}
+  100%{ opacity:0; transform:translate(calc(-50% + var(--x) * 1px), calc(-50% + var(--y) * 1px)) scale(1.3);}
+}
+.heart-floating {
+  position:absolute; width:20px; height:20px; background:hotpink;
+  transform:rotate(45deg); animation: floatHeart 10s linear forwards;
+  z-index:2; pointer-events:none; opacity:5;
+}
+.heart-floating::before, .heart-floating::after {
+  content:''; position:absolute; width:20px; height:20px; background:hotpink; border-radius:50%;
+}
+.heart-floating::before { top:-10px; left:0; }
+.heart-floating::after { left:-10px; top:0; }
+@keyframes floatHeart {
+  0%{ transform:translateY(100vh) rotate(45deg); opacity:1; }
+  100%{ transform:translateY(-10vh) rotate(45deg); opacity:0; }
+}
+</style>
+</head>
+<body>
+
+<!-- Lock Screen -->
+<div id="lockScreen">
+  <div class="heart"></div>
+  <h2>Your Birthday </h2>
+  <div class="picker-container">
+    <div class="picker">
+      <div>DD</div>
+      <button onclick="changeNumber('dd',1)">▲</button>
+      <input type="text" id="dd" readonly value="00">
+      <button onclick="changeNumber('dd',-1)">▼</button>
+    </div>
+    <div class="picker">
+      <div>MM</div>
+      <button onclick="changeNumber('mm',1)">▲</button>
+      <input type="text" id="mm" readonly value="00">
+      <button onclick="changeNumber('mm',-1)">▼</button>
+    </div>
+    <div class="picker">
+      <div>YY</div>
+      <button onclick="changeNumber('yy',1)">▲</button>
+      <input type="text" id="yy" readonly value="1999">
+      <button onclick="changeNumber('yy',-1)">▼</button>
+    </div>
+  </div>
+  <button id="unlockBtn" onclick="unlock()">Tap Bby</button>
+  <p id="errorMsg">Hmrr Tl Cx Cx</p>
+</div>
+
+<div id="iLoveText">Birthday Gift Pr Arr Bwrr</div>
+<canvas id="scene"></canvas>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+/* Lock Logic */
+const correctPin = { dd:"15", mm:"09", yy:"2004" };
+function changeNumber(field, delta){
+  const input = document.getElementById(field);
+  let value = parseInt(input.value);
+  if(field==='dd'){ value+=delta; if(value<0)value=31; if(value>31)value=0; }
+  if(field==='mm'){ value+=delta; if(value<0)value=12; if(value>12)value=0; }
+  if(field==='yy'){ value+=delta; if(value<1999)value=2025; if(value>2025)value=1999; }
+  input.value = value.toString().padStart(2,'0');
+}
+function unlock(){
+  const dd=document.getElementById('dd').value;
+  const mm=document.getElementById('mm').value;
+  const yy=document.getElementById('yy').value;
+  if(dd===correctPin.dd && mm===correctPin.mm && yy===correctPin.yy){
+    document.getElementById('lockScreen').style.display='none';
+    const loveText = document.getElementById('iLoveText');
+    loveText.style.display='block';
+    setTimeout(()=>{
+      loveText.style.opacity=0;
+      setTimeout(()=>{ initScene(); },2000);
+    },2000);
+  }else{
+    const msg=document.getElementById('errorMsg');
+    msg.style.display='block';
+    setTimeout(()=>msg.style.display='none',2000);
+  }
+}
+
+/* 3D Scene & Floating Elements */
+const phrases = [
+  "Happy Birthday","Take Care","I Love You","Arr Bwrr",
+  "Kyam Mr Yay Gayu Sike pr","A Yam Ma Soe Pr Nae","Miss You",
+  "A SaSa A YrYr A Sin Pyae Pr Sy","Cxit Tl Naw","Mway Nae Mr Pyaw Shwin Pr Sy"
+];
+const urls = [
+  "https://i.imgur.com/1s40hc5.jpeg","https://i.imgur.com/m3QxvRv.jpeg",
+  "https://i.imgur.com/uyaVNru.jpeg","https://i.imgur.com/L2UFyiY.jpeg",
+  "https://i.imgur.com/x0CtYxG.jpeg","https://i.imgur.com/IIjh5AB.jpeg",
+  "https://i.imgur.com/sGhjWa8.jpeg","https://i.imgur.com/PNunuuc.jpeg",
+  "https://i.imgur.com/qL1uFSR.jpeg","https://i.imgur.com/kYxuDad.jpeg",
+  "https://i.imgur.com/DO9yTHr.jpeg","https://i.imgur.com/4qS9u6d.jpeg",
+  "https://i.imgur.com/p2BEZqH.jpeg","https://i.imgur.com/ffx6n3f.jpeg",
+  "https://i.imgur.com/8cwuYAG.jpeg","https://i.imgur.com/wuNiUJ3.jpeg",
+  "https://i.imgur.com/l2eUEBA.png","https://i.imgur.com/OIDzgBj.png",
+  "https://i.imgur.com/8pqO8fV.png","https://i.imgur.com/jBu0Q4n.jpeg",
+  "https://i.imgur.com/hUirZEY.jpeg","https://i.imgur.com/Z4q3MRJ.jpeg",
+  "https://i.imgur.com/GNOfkrW.jpeg","https://i.imgur.com/FdYl39w.png",
+  "https://i.imgur.com/3hWnVb8.png","https://i.imgur.com/QTvTBkH.png",
+  "https://i.imgur.com/8LNYYtg.png","https://i.imgur.com/KmuCtgD.png"
+];
+
+function initScene(){
+  const canvas = document.getElementById('scene');
+  const renderer = new THREE.WebGLRenderer({canvas, alpha:true});
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight,0.1,1000);
+  camera.position.z=50;
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+  const globeGroup = new THREE.Group();
+  scene.add(globeGroup);
+  const loader = new THREE.TextureLoader();
+  const radius = 20;
+
+  urls.forEach((url,i)=>{
+    loader.load(url,texture=>{
+      const geometry = new THREE.PlaneGeometry(5,5);
+      const material = new THREE.MeshBasicMaterial({map:texture,side:THREE.DoubleSide,transparent:true});
+      const mesh = new THREE.Mesh(geometry,material);
+      const total = urls.length;
+      const offset = 2/total;
+      const increment = Math.PI*(3-Math.sqrt(5));
+      const y = i*offset-1+(offset/2);
+      const r = Math.sqrt(1-y*y);
+      const phi = i*increment;
+      mesh.position.set(radius*Math.cos(phi)*r,radius*y,radius*Math.sin(phi)*r);
+      mesh.lookAt(new THREE.Vector3(0,0,0));
+      globeGroup.add(mesh);
+    });
+  });
+
+  function animate(){
+    requestAnimationFrame(animate);
+    globeGroup.rotation.y+=0.003;
+    controls.update();
+    renderer.render(scene,camera);
+  }
+  animate();
+
+  function createFloatingText(text){
+    const div = document.createElement('div');
+    div.className='floating-text';
+    div.textContent=text;
+    const x=(Math.random()*200)-100;
+    const y=(Math.random()*200)-100;
+    div.style.setProperty('--x',x);
+    div.style.setProperty('--y',y);
+    div.style.animation='floatTextAnim 5s ease forwards';
+    document.body.appendChild(div);
+    setTimeout(()=>{if(div.parentNode)div.parentNode.removeChild(div);},5000);
+  }
+
+  setInterval(()=>{
+    const phrase=phrases[Math.floor(Math.random()*phrases.length)];
+    createFloatingText(phrase);
+  },1500);
+
+  function createHeart(){
+    const heart = document.createElement('div');
+    heart.className='heart-floating';
+    heart.style.left=`${Math.random()*100}vw`;
+    heart.style.top=`${Math.random()*100}vh`;
+    const duration = 8+Math.random()*4;
+    heart.style.animationDuration=`${duration}s`;
+    document.body.appendChild(heart);
+    setTimeout(()=>{if(heart.parentNode)heart.parentNode.removeChild(heart);},duration*1000);
+  }
+  setInterval(createHeart,500);
+
+  window.addEventListener('resize',()=>{
+    renderer.setSize(window.innerWidth,window.innerHeight);
+    camera.aspect=window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+  });
+}
+</script>
+</body>
+</html>
